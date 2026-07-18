@@ -4,6 +4,9 @@ import os, json, urllib.request
 app = Flask(__name__)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 conversations = {}
+@app.route("/")
+def home():
+      return open("public/index.html", encoding="utf-8").read()
 
 @app.route("/api/chat", methods=["POST", "OPTIONS"])
 def chat():
