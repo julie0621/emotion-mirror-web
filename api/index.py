@@ -68,7 +68,7 @@ def chat():
     parts.append({"role": "user", "parts": [{"text": msg}]})
     try:
         payload = json.dumps({"contents": parts, "systemInstruction": {"parts": [{"text": "你是用户的温和理性型陪伴者。共情但不煽情。核心：我陪你。怎么走，听你的。"}]}}).encode()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         r = urllib.request.urlopen(urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}), timeout=30)
         reply = json.loads(r.read())["candidates"][0]["content"]["parts"][0]["text"]
         h.append({"role": "user", "text": msg})
