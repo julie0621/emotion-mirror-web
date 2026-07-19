@@ -2,7 +2,9 @@ from flask import Flask, request, jsonify
 import os, json, urllib.request
 
 app = Flask(__name__)
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+API_URL = "https://api.deepseek.com/v1/chat/completions"
+SYSTEM_MSG = {"role": "system", "content": "你是用户的温和理性型陪伴者。共情但不煽情。核心：我陪你。怎么走，听你的。"}
 conversations = {}
 
 HTML_PAGE = """<!DOCTYPE html>
@@ -62,17 +64,20 @@ def chat():
     if sid not in conversations:
         conversations[sid] = []
     h = conversations[sid]
-    parts = []
+    messages = [SYSTEM_MSG]
     for m in h[-10:]:
-        parts.append({"role": m["role"], "parts": [{"text": m["text"]}]})
-    parts.append({"role": "user", "parts": [{"text": msg}]})
+        messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": msg})
     try:
-        payload = json.dumps({"contents": parts, "systemInstruction": {"parts": [{"text": "你是用户的温和理性型陪伴者。共情但不煽情。核心：我陪你。怎么走，听你的。"}]}}).encode()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        r = urllib.request.urlopen(urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}), timeout=30)
-        reply = json.loads(r.read())["candidates"][0]["content"]["parts"][0]["text"]
-        h.append({"role": "user", "text": msg})
-        h.append({"role": "model", "text": reply})
+        body = json.dumps({"model": "deepseek-chat", "messages": messages, "stream": False}).encode()
+        req = urllib.request.Request(
+            API_URL, data=body,
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + API_KEY}
+        )
+        resp = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        reply = resp["choices"][0]["message"]["content"]
+        h.append({"role": "user", "content": msg})
+        h.append({"role": "assistant", "content": reply})
         if len(h) > 20:
             conversations[sid] = h[-20:]
         return jsonify({"reply": reply})
