@@ -1,0 +1,19 @@
+=== STARTING ===
+cwd: C:\Users\orions\emotion-mirror-web
+status: rc=0
+stdout: On branch master
+Your branch is ahead of 'origin/master' by 2 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   push_helper.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	push_log.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+stderr: 

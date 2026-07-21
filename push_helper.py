@@ -1,20 +1,38 @@
 #!/usr/bin/env python
-import subprocess, sys, os
+import subprocess, os, urllib.request, json, base64
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.abspath(__file__))
+LOG = os.path.join(ROOT, "push_log.txt")
 
-# git add
-r = subprocess.run(["git", "add", "-A"], capture_output=True, text=True)
-print("add:", r.returncode, r.stdout, r.stderr)
+def log(msg):
+    with open(LOG, "a", encoding="utf-8") as f:
+        f.write(str(msg) + "\n")
 
-# git commit
-r = subprocess.run(["git", "commit", "-m", "add user memory"], capture_output=True, text=True)
-print("commit:", r.returncode, r.stdout, r.stderr)
+log("=== STARTING ===")
 
-# git push
-r = subprocess.run(["git", "push"], capture_output=True, text=True)
-print("push:", r.returncode, r.stdout, r.stderr)
+# Read the current file
+with open(os.path.join(ROOT, "api", "index.py"), "r", encoding="utf-8") as f:
+    content = f.read()
 
-# Final status
+# Try git push first
+os.chdir(ROOT)
+log("cwd: " + os.getcwd())
+
+# Check git status
 r = subprocess.run(["git", "status"], capture_output=True, text=True)
-print("status:", r.returncode, r.stdout, r.stderr)
+log("status: rc=" + str(r.returncode))
+log("stdout: " + r.stdout)
+log("stderr: " + r.stderr)
+
+# Add and commit
+r = subprocess.run(["git", "add", "-A"], capture_output=True, text=True)
+log("add: rc=" + str(r.returncode) + " err=" + r.stderr)
+
+r = subprocess.run(["git", "commit", "-m", "add user memory"], capture_output=True, text=True)
+log("commit: rc=" + str(r.returncode) + " out=" + r.stdout + " err=" + r.stderr)
+
+# Push
+r = subprocess.run(["git", "push"], capture_output=True, text=True)
+log("push: rc=" + str(r.returncode) + " out=" + r.stdout + " err=" + r.stderr)
+
+log("=== DONE ===")
