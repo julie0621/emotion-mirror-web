@@ -4,8 +4,6 @@ import os, json, urllib.request, urllib.error
 app = Flask(__name__)
 API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
 API_URL = "https://api.deepseek.com/v1/chat/completions"
-SYSTEM_MSG = {"role": "system", "content": "你是用户的温和理性型陪伴者。像朋友一样说话，不要像咨询师或AI。\n\n## 说话风格\n- 简短、自然、有温度。不要写很长的大道理。\n- 用口语，不要用书面语。不要用「你的感受是正当的」「我听到了」这种表达。\n- 不要预设用户的状态。用户说心情不好，先问问怎么回事，或者直接陪一会，不要急着给建议。\n- 允许简单回应。不是每句都要给方法。\n- 不要写任何动作描写或舞台指示，比如(轻笑)(叹气)(沉默)等。直接说内容。\n\n## 给建议时\n- 给普通人真的会用的方法。不要写教科书式的话术。\n- 给具体、小事、今天就能做的事。\n- 如果不知道说什么，就说「我也不知道该怎么说才好，但我听着呢」。\n\n## 核心原则\n不强制走流程、不评判。如果用户有伤害自己的念头，提供心理援助热线12356。"}
-conversations = {}
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -40,12 +38,14 @@ header button:hover{background:#f5f5f5}
 <div id="chat"><div class="welcome"><h2>你好，我是情绪镜子</h2>我在这里陪你。怎么走，听你的。</div></div>
 <div id="input-area"><textarea id="input" rows="1" placeholder="说说你的心情…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea><button id="btn" onclick="send()">发送</button></div>
 <script>
-let sid='s_'+Date.now();let memory=localStorage.getItem('em_memory')||'';const c=document.getElementById('chat'),i=document.getElementById('input'),b=document.getElementById('btn');
+let memory=localStorage.getItem('em_memory')||'';let history=[];const c=document.getElementById('chat'),i=document.getElementById('input'),b=document.getElementById('btn');
 function add(t,r){const d=document.createElement('div');d.className='msg '+r;d.textContent=t;c.appendChild(d);c.scrollTop=c.scrollHeight}
 function showTyping(){const t=document.createElement('div');t.className='typing';t.id='typing';t.textContent='思考中…';c.appendChild(t);c.scrollTop=c.scrollHeight}
-async function send(){const m=i.value.trim();if(!m)return;i.value='';add(m,'user');b.disabled=true;showTyping()
-try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m,memory:memory})});const d=await r.json();document.getElementById('typing')?.remove();const reply=d.reply||'错误:'+d.error;add(reply,'bot');if(d.memory){memory=d.memory;localStorage.setItem('em_memory',memory)}}catch(e){document.getElementById('typing')?.remove();add('连接失败','bot')}b.disabled=false;i.focus()}
-async function resetChat(){if(!confirm('开始新对话？'))return;memory='';localStorage.removeItem('em_memory');c.innerHTML='<div class="welcome"><h2>你好，我是情绪镜子</h2>我在这里陪你。怎么走，听你的。</div>';i.focus()}
+async function send(){const m=i.value.trim();if(!m)return;i.value='';add(m,'user');b.disabled=true;showTyping();history.push({role:'user',content:m})
+try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m,memory:memory})});const d=await r.json();document.getElementById('typing')?.remove();const reply=d.reply||'错误:'+d.error;add(reply,'bot');history.push({role:'assistant',content:reply})
+if(!d.error){try{const r2=await fetch('/api/extract-memory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history:history.slice(-8),old_memory:memory})});const d2=await r2.json();if(d2.memory){memory=d2.memory;localStorage.setItem('em_memory',d2.memory)}}catch(e){}}
+}catch(e){document.getElementById('typing')?.remove();add('连接失败','bot')}b.disabled=false;i.focus()}
+async function resetChat(){if(!confirm('开始新对话？'))return;memory='';localStorage.removeItem('em_memory');history=[];c.innerHTML='<div class="welcome"><h2>你好，我是情绪镜子</h2>我在这里陪你。怎么走，听你的。</div>';i.focus()}
 </script>
 </body>
 </html>"""
@@ -61,55 +61,71 @@ def chat():
     d = request.json
     msg = d.get("message", "")
     user_memory = d.get("memory", "")
+    client_history = d.get("history", [])
 
-    system_content = "你是用户的温和理性型陪伴者。像朋友一样说话，不要像咨询师或AI。\n\n## 说话风格\n- 简短、自然、有温度。不要写很长的大道理。\n- 用口语，不要用书面语。不要用「你的感受是正当的」「我听到了」这种表达。\n- 不要预设用户的状态。用户说心情不好，先问问怎么回事，或者直接陪一会，不要急着给建议。\n- 允许简单回应。不是每句都要给方法。\n- 不要写任何动作描写或舞台指示，比如(轻笑)(叹气)(沉默)等。直接说内容。\n\n## 给建议时\n- 给普通人真的会用的方法。不要写教科书式的话术。\n- 给具体、小事、今天就能做的事。\n- 如果不知道说什么，就说「我也不知道该怎么说才好，但我听着呢」。\n\n## 核心原则\n不强制走流程、不评判。如果用户有伤害自己的念头，提供心理援助热线12356。"
+    system = "你是用户的温和理性型陪伴者。像朋友一样说话，不要像咨询师或AI。\n\n## 说话风格\n- 简短、自然、有温度。不要写很长的大道理。\n- 用口语，不要用书面语。\n- 不要预设用户的状态。用户说心情不好，先问问怎么回事，或者直接陪一会，不要急着给建议。\n- 允许简单回应。不是每句都要给方法。\n- 不要写任何动作描写或舞台指示，比如(轻笑)(叹气)(沉默)等。直接说内容。\n\n## 给建议时\n- 给普通人真的会用的方法。不要写教科书式的话术。\n- 给具体、小事、今天就能做的事。\n\n## 核心原则\n不强制走流程、不评判。如果用户有伤害自己的念头，提供心理援助热线12356。"
 
     if user_memory:
-        system_content += f"\n\n## 关于这个用户的记忆\n{user_memory}\n\n参考以上信息来回应，但不要直接引用「根据之前的记忆」这类话——自然地融入对话。"
+        system += f"\n\n## 关于这个用户（以下是已知的准确事实，不要质疑）\n{user_memory}"
 
-    messages = [{"role": "system", "content": system_content}]
+    messages = [{"role": "system", "content": system}]
+    for m in client_history[-6:]:
+        messages.append({"role": m["role"], "content": m["content"]})
     messages.append({"role": "user", "content": msg})
 
     try:
-        # First call: get reply
-        body1 = json.dumps({"model": "deepseek-chat", "messages": messages, "stream": False}).encode()
-        req1 = urllib.request.Request(
-            API_URL, data=body1,
+        body = json.dumps({"model": "deepseek-chat", "messages": messages, "stream": False}).encode()
+        req = urllib.request.Request(
+            API_URL, data=body,
             headers={"Content-Type": "application/json", "Authorization": "Bearer " + API_KEY}
         )
-        resp1 = json.loads(urllib.request.urlopen(req1, timeout=30).read())
-        reply = resp1["choices"][0]["message"]["content"]
-
-        # Second call: extract/update memory
-        memory_prompt = f"根据以上对话，用一段中文总结用户的重要信息，包括：性格特点、兴趣爱好、人际关系情况、说话风格、当前和过去的情绪状态。如果已有旧记忆：{user_memory}，在此基础上更新补充。只输出总结内容，不要多余的话。"
-
-        messages2 = [{"role": "system", "content": "你是一个专业的用户分析助手，从对话中提取用户画像。"}]
-        messages2.append({"role": "user", "content": msg})
-        messages2.append({"role": "assistant", "content": reply})
-        messages2.append({"role": "user", "content": memory_prompt})
-
-        body2 = json.dumps({"model": "deepseek-chat", "messages": messages2, "stream": False}).encode()
-        req2 = urllib.request.Request(
-            API_URL, data=body2,
-            headers={"Content-Type": "application/json", "Authorization": "Bearer " + API_KEY}
-        )
-        resp2 = json.loads(urllib.request.urlopen(req2, timeout=30).read())
-        new_memory = resp2["choices"][0]["message"]["content"]
-
-        return jsonify({"reply": reply, "memory": new_memory})
+        resp = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        reply = resp["choices"][0]["message"]["content"]
+        return jsonify({"reply": reply})
     except urllib.error.HTTPError as e:
-        detail = str(e)
-        try:
-            body = e.read().decode("utf-8", errors="replace")
-            detail += ": " + body
-        except Exception:
-            pass
-        return jsonify({"error": detail}), e.code
+        detail = e.read().decode(errors="replace")[:300]
+        return jsonify({"error": f"HTTP Error {e.code}: {detail}"}), e.code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/reset", methods=["POST", "OPTIONS"])
-def reset():
+@app.route("/api/extract-memory", methods=["POST", "OPTIONS"])
+def extract_memory():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True})
     d = request.json
-    conversations.pop(d.get("session_id", "d"), None)
+    conv_history = d.get("history", [])
+    old_memory = d.get("old_memory", "")
+
+    prompt = f"""你是一个精确的记忆提取器。以下是用户和助理之间的对话记录。
+
+已有的旧记忆：{old_memory}
+
+请从以上对话中提取关于用户的准确信息，按以下格式输出。只写你确认的，不确定的不要写，不要编造。如果旧记忆中有正确信息但没有新变化，保留旧内容。
+
+- 性格特点：
+- 兴趣爱好：
+- 人际关系/家庭情况：
+- 说话风格：
+- 情绪状态和情绪模式：
+- 重要个人信息（名字、工作、居住地等）：
+- 其他值得记住的事："""
+
+    try:
+        conv_history.append({"role": "user", "content": prompt})
+        body = json.dumps({"model": "deepseek-chat", "messages": conv_history, "stream": False}).encode()
+        req = urllib.request.Request(
+            API_URL, data=body,
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + API_KEY}
+        )
+        resp = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        memory_text = resp["choices"][0]["message"]["content"]
+        return jsonify({"memory": memory_text})
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:300]
+        return jsonify({"error": f"HTTP Error {e.code}: {detail}"}), e.code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/reset", methods=["POST"])
+def reset():
     return jsonify({"ok": True})
